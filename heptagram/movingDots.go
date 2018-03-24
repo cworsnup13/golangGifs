@@ -26,12 +26,12 @@ var palette = []color.Color{
 }
 
 type ShapePattern interface {
-	Draw(step int, x, y float64) uint8
+	Draw(step int, x, y float64) (bool, color.Color)
 }
 
 type Shape interface {
 	Name() string
-	Brightness(x, y float64) uint8
+	Brightness(x, y float64) (bool, color.Color)
 }
 
 type Coordinates struct {
@@ -44,19 +44,21 @@ type Circle struct {
 
 type Line struct {
 	Start, End Coordinates
+	Color color.Color
 }
 
 type Pattern struct {
 	StepPoints [][]Shape
 }
 
-func (p *Pattern) Draw(step int, x, y float64) uint8 {
+func (p *Pattern) Draw(step int, x, y float64) (bool, color.Color) {
 	for _, v := range p.StepPoints[step] {
-		if v.Brightness(x, y) == 0 {
-			return 0
+		draw, col := v.Brightness(x, y)
+		if draw {
+			return true, col
 		}
 	}
-	return 255
+	return false, nil
 }
 
 func (c *Circle) Name() string {
@@ -67,35 +69,35 @@ func (l *Line) Name() string {
 	return "line"
 }
 
-func (c *Circle) Brightness(x, y float64) uint8 {
+func (c *Circle) Brightness(x, y float64) (bool, color.Color) {
 	if math.Sqrt(math.Pow(c.X-x, 2)+math.Pow(c.Y-y, 2))/c.R > 1 {
-		return 255
+		return false, nil
 	}
-	return 0
+	return true, palette[0]
 }
 
-func (l *Line) Brightness(x, y float64) uint8 {
+func (l *Line) Brightness(x, y float64) (bool, color.Color) {
 	if x < math.Min(l.End.X, l.Start.X){
-		return 255
+		return false, nil
 	}
 	if x > math.Max(l.End.X, l.Start.X){
-		return 255
+		return false, nil
 	}
 
 	if y < math.Min(l.End.Y, l.Start.Y){
-		return 255
+		return false, nil
 	}
 	if y > math.Max(l.End.Y, l.Start.Y){
-		return 255
+		return false, nil
 	}
 
 	slope := (l.End.Y - l.Start.Y) / (l.End.X - l.Start.X)
 	intercept := l.Start.Y - (slope * l.Start.X)
 	if math.Abs(y - (slope * x + intercept)) < 1{
-		return 0
+		return true, l.Color
 	}
 
-	return 255
+	return false, nil
 }
 
 func GetSquarePattern(xCenter, yCenter, radius, speed float64, phase int) []Coordinates {
@@ -204,12 +206,14 @@ func RotatingHeptagram(hw, hh float64) ShapePattern {
 
 	var steps = make([][]Shape, defaultSteps)
 	for i := range steps {
-		steps[i] = make([]Shape, 2 * len(set))
+		steps[i] = make([]Shape, 3 * len(set))
 		for j := range steps[i] {
 			if j < len(set) {
 				steps[i][j] = &Circle{X: set[j][i].X, Y: set[j][i].Y, R: 3,}
+			} else if j < 2 * len(set) {
+				steps[i][j] = &Line{Start: set[j%len(set)][i], End: set[(j+3)%len(set)][i], Color:palette[1]}
 			} else {
-				steps[i][j] = &Line{Start: set[j%len(set)][i], End: set[(j+3)%len(set)][i]}
+				steps[i][j] = &Line{Start: set[j%len(set)][i], End: set[(j+4)%len(set)][i], Color:palette[2]}
 			}
 		}
 	}
@@ -220,14 +224,15 @@ func DrawPalette(w, h, step int, patterns []ShapePattern, ) *image.Paletted {
 	img := image.NewPaletted(image.Rect(0, 0, w, h), palette)
 	for x := 0; x < w; x++ {
 		for y := 0; y < h; y++ {
-			px := uint8(255)
+			var col color.Color
+			col = color.RGBA{255,255,255,255}
 			for _, v := range patterns {
-				tmp := v.Draw(step, float64(x), float64(y))
-				if tmp < px {
-					px = tmp
+				drawn, tmpColor := v.Draw(step, float64(x), float64(y))
+				if drawn {
+					col = tmpColor
 				}
 			}
-			img.Set(x, y, color.RGBA{px, px, px, 255})
+			img.Set(x, y, col)
 		}
 	}
 	return img
@@ -258,15 +263,3 @@ func main() {
 	})
 	fmt.Printf("Built gif in %d seconds\n", time.Now().Unix() - startTime.Unix())
 }
-
-// Seven Pointed
-//θ := 2.0 * math.Pi / float64(steps) * float64(step)
-//θ0 := 2 * math.Pi / 3 * 0.0 // figure out phase later
-//circles[0].X = hw - 100*math.Sin(θ0+θ)
-//circles[0].Y = hh - 100*math.Cos(θ0+θ)
-//circles[0].R = 3
-//for i, point := range points {
-//	point.X = hw - 100*math.Sin(float64(i) * (2.0 * math.Pi/float64(len(points))))
-//	point.Y = hh - 100*math.Cos(float64(i) * (2.0 * math.Pi/float64(len(points))))
-//	point.R = 3
-//}
