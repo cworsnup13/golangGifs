@@ -6,6 +6,8 @@ import (
 	"image/gif"
 	"math"
 	"os"
+	"fmt"
+	"time"
 )
 
 const (
@@ -27,6 +29,11 @@ type ShapePattern interface {
 	Draw(step int, x, y float64) uint8
 }
 
+type Shape interface {
+	Name() string
+	Brightness(x, y float64) uint8
+}
+
 type Coordinates struct {
 	X, Y float64
 }
@@ -35,8 +42,12 @@ type Circle struct {
 	X, Y, R float64
 }
 
+type Line struct {
+	Start, End Coordinates
+}
+
 type Pattern struct {
-	StepPoints [][]*Circle
+	StepPoints [][]Shape
 }
 
 func (p *Pattern) Draw(step int, x, y float64) uint8 {
@@ -48,11 +59,43 @@ func (p *Pattern) Draw(step int, x, y float64) uint8 {
 	return 255
 }
 
+func (c *Circle) Name() string {
+	return "circle"
+}
+
+func (l *Line) Name() string {
+	return "line"
+}
+
 func (c *Circle) Brightness(x, y float64) uint8 {
 	if math.Sqrt(math.Pow(c.X-x, 2)+math.Pow(c.Y-y, 2))/c.R > 1 {
 		return 255
 	}
 	return 0
+}
+
+func (l *Line) Brightness(x, y float64) uint8 {
+	if x < math.Min(l.End.X, l.Start.X){
+		return 255
+	}
+	if x > math.Max(l.End.X, l.Start.X){
+		return 255
+	}
+
+	if y < math.Min(l.End.Y, l.Start.Y){
+		return 255
+	}
+	if y > math.Max(l.End.Y, l.Start.Y){
+		return 255
+	}
+
+	slope := (l.End.Y - l.Start.Y) / (l.End.X - l.Start.X)
+	intercept := l.Start.Y - (slope * l.Start.X)
+	if math.Abs(y - (slope * x + intercept)) < 1{
+		return 0
+	}
+
+	return 255
 }
 
 func GetSquarePattern(xCenter, yCenter, radius, speed float64, phase int) []Coordinates {
@@ -129,9 +172,9 @@ func GetCirclePattern(xCenter, yCenter, radius, speed float64, phase int) []Coor
 
 func RotatingCircle(hw, hh float64) ShapePattern {
 	pattern := GetCirclePattern(hw, hh, 50, 1, 0)
-	var points = make([][]*Circle, defaultSteps)
+	var points = make([][]Shape, defaultSteps)
 	for i := range points {
-		points[i] = []*Circle{{X: pattern[i].X, Y: pattern[i].Y, R: 3,}}
+		points[i] = []Shape{&Circle{X: pattern[i].X, Y: pattern[i].Y, R: 3,}}
 	}
 	return &Pattern{points}
 }
@@ -142,9 +185,9 @@ func RotatingSquares(hw, hh float64) ShapePattern {
 		squares[i] = GetSquarePattern(hw, hh, 50, 1, 25*i)
 	}
 
-	var squarePoints = make([][]*Circle, defaultSteps)
+	var squarePoints = make([][]Shape, defaultSteps)
 	for i := range squarePoints {
-		squarePoints[i] = make([]*Circle, len(squares))
+		squarePoints[i] = make([]Shape, len(squares))
 		for j := range squarePoints[i] {
 			squarePoints[i][j] = &Circle{X: squares[j][i].X, Y: squares[j][i].Y, R: 3,}
 		}
@@ -154,18 +197,23 @@ func RotatingSquares(hw, hh float64) ShapePattern {
 
 func RotatingHeptagram(hw, hh float64) ShapePattern {
 	var set = make([][]Coordinates, 12)
+
 	for i := range set {
 		set[i] = GetHeptagramPattern(hw, hh, 100, 1, i * (defaultSteps/len(set)))
 	}
 
-	var squarePoints = make([][]*Circle, defaultSteps)
-	for i := range squarePoints {
-		squarePoints[i] = make([]*Circle, len(set))
-		for j := range squarePoints[i] {
-			squarePoints[i][j] = &Circle{X: set[j][i].X, Y: set[j][i].Y, R: 3,}
+	var steps = make([][]Shape, defaultSteps)
+	for i := range steps {
+		steps[i] = make([]Shape, 2 * len(set))
+		for j := range steps[i] {
+			if j < len(set) {
+				steps[i][j] = &Circle{X: set[j][i].X, Y: set[j][i].Y, R: 3,}
+			} else {
+				steps[i][j] = &Line{Start: set[j%len(set)][i], End: set[(j+3)%len(set)][i]}
+			}
 		}
 	}
-	return &Pattern{squarePoints}
+	return &Pattern{steps}
 }
 
 func DrawPalette(w, h, step int, patterns []ShapePattern, ) *image.Paletted {
@@ -186,6 +234,7 @@ func DrawPalette(w, h, step int, patterns []ShapePattern, ) *image.Paletted {
 }
 
 func main() {
+	startTime := time.Now()
 	var w, h = 240, 240
 	var hw, hh = float64(w/2), float64(h/2)
 
@@ -207,6 +256,7 @@ func main() {
 		Image: images,
 		Delay: delays,
 	})
+	fmt.Printf("Built gif in %d seconds\n", time.Now().Unix() - startTime.Unix())
 }
 
 // Seven Pointed
