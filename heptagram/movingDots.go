@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	defaultSteps = 100
+	defaultSteps = 120
 )
 
 var palette = []color.Color{
@@ -86,6 +86,35 @@ func GetSquarePattern(xCenter, yCenter, radius, speed float64, phase int) []Coor
 	return coordsPhase
 }
 
+func GetHeptagramPattern(xCenter, yCenter, radius, speed float64, phase int) []Coordinates {
+
+	var points = make([]Coordinates, 7)
+	for i := range points {
+		points[i] = Coordinates{
+			X: xCenter - radius * math.Sin(float64(i) * (2.0 * math.Pi/float64(len(points)))),
+			Y: yCenter - radius * math.Cos(float64(i) * (2.0 * math.Pi/float64(len(points)))),
+		}
+	}
+
+	var coords = make([]Coordinates, defaultSteps)
+	var onePart = int(float64(len(coords)) / float64(len(points)) / speed)
+	var start, end Coordinates
+	end = points[0]
+	var startIdx int
+	for i := range coords {
+		mod := i % onePart
+		if mod == 0 {
+			start = end
+			startIdx = (startIdx+3) % len(points)
+			end = points[startIdx]
+		}
+		coords[i].X = float64(mod)*((end.X-start.X)/float64(onePart)) + start.X
+		coords[i].Y = float64(mod)*(end.Y-start.Y)/float64(onePart) + start.Y
+	}
+	coordsPhase := append(coords[phase:], coords[:phase]...)
+	return coordsPhase
+}
+
 func GetCirclePattern(xCenter, yCenter, radius, speed float64, phase int) []Coordinates {
 	var coords = make([]Coordinates, defaultSteps)
 	for i := range coords {
@@ -123,6 +152,22 @@ func RotatingSquares(hw, hh float64) ShapePattern {
 	return &Pattern{squarePoints}
 }
 
+func RotatingHeptagram(hw, hh float64) ShapePattern {
+	var set = make([][]Coordinates, 12)
+	for i := range set {
+		set[i] = GetHeptagramPattern(hw, hh, 100, 1, i * (defaultSteps/len(set)))
+	}
+
+	var squarePoints = make([][]*Circle, defaultSteps)
+	for i := range squarePoints {
+		squarePoints[i] = make([]*Circle, len(set))
+		for j := range squarePoints[i] {
+			squarePoints[i][j] = &Circle{X: set[j][i].X, Y: set[j][i].Y, R: 3,}
+		}
+	}
+	return &Pattern{squarePoints}
+}
+
 func DrawPalette(w, h, step int, patterns []ShapePattern, ) *image.Paletted {
 	img := image.NewPaletted(image.Rect(0, 0, w, h), palette)
 	for x := 0; x < w; x++ {
@@ -144,7 +189,8 @@ func main() {
 	var w, h = 240, 240
 	var hw, hh = float64(w/2), float64(h/2)
 
-	patterns := []ShapePattern{RotatingSquares(hw, hh), RotatingCircle(hw, hh)}
+	//patterns := []ShapePattern{RotatingSquares(hw, hh), RotatingCircle(hw, hh)}
+	patterns := []ShapePattern{RotatingHeptagram(hw, hh)}
 
 	var images []*image.Paletted
 	var delays []int
