@@ -12,6 +12,8 @@ import (
 
 const (
 	defaultSteps = 120
+	heptaPoints = 7
+	rotationReduction = 100
 )
 
 var palette = []color.Color{
@@ -93,7 +95,7 @@ func (l *Line) Brightness(x, y float64) (bool, color.Color) {
 
 	slope := (l.End.Y - l.Start.Y) / (l.End.X - l.Start.X)
 	intercept := l.Start.Y - (slope * l.Start.X)
-	if math.Abs(y - (slope * x + intercept)) < 1{
+	if math.Abs(y - (slope * x + intercept)) < 1.5{
 		return true, l.Color
 	}
 
@@ -131,27 +133,25 @@ func GetSquarePattern(xCenter, yCenter, radius, speed float64, phase int) []Coor
 	return coordsPhase
 }
 
-func GetHeptagramPattern(xCenter, yCenter, radius, speed float64, phase int) []Coordinates {
-
-	var points = make([]Coordinates, 7)
-	for i := range points {
-		points[i] = Coordinates{
-			X: xCenter - radius * math.Sin(float64(i) * (2.0 * math.Pi/float64(len(points)))),
-			Y: yCenter - radius * math.Cos(float64(i) * (2.0 * math.Pi/float64(len(points)))),
-		}
+func GetHeptagramPoints(xCenter, yCenter, radius, rotation float64, position int) Coordinates {
+	return Coordinates{
+		X: xCenter - radius * math.Sin(float64(position) * (2.0 * math.Pi/float64(heptaPoints)) + rotation),
+		Y: yCenter - radius * math.Cos(float64(position) * (2.0 * math.Pi/float64(heptaPoints)) + rotation),
 	}
+}
 
+func GetHeptagramPattern(xCenter, yCenter, radius, speed float64, phase int) []Coordinates {
 	var coords = make([]Coordinates, defaultSteps)
-	var onePart = int(float64(len(coords)) / float64(len(points)) / speed)
+	var onePart = int(float64(len(coords)) / float64(heptaPoints) / speed)
 	var start, end Coordinates
-	end = points[0]
+	end = GetHeptagramPoints(xCenter, yCenter, radius, 0, 0)
 	var startIdx int
 	for i := range coords {
 		mod := i % onePart
 		if mod == 0 {
-			start = end
-			startIdx = (startIdx+3) % len(points)
-			end = points[startIdx]
+			start = GetHeptagramPoints(xCenter, yCenter, radius, float64((i + defaultSteps - phase) % defaultSteps)/rotationReduction, startIdx)
+			startIdx = (startIdx+3) % heptaPoints
+			end = GetHeptagramPoints(xCenter, yCenter, radius, float64((i + defaultSteps - phase + onePart) % defaultSteps)/rotationReduction, startIdx)
 		}
 		coords[i].X = float64(mod)*((end.X-start.X)/float64(onePart)) + start.X
 		coords[i].Y = float64(mod)*(end.Y-start.Y)/float64(onePart) + start.Y
@@ -197,23 +197,26 @@ func RotatingSquares(hw, hh float64) ShapePattern {
 	return &Pattern{squarePoints}
 }
 
-func RotatingHeptagram(hw, hh float64) ShapePattern {
+func RotatingHeptagram(hw, hh ,radius float64) ShapePattern {
 	var set = make([][]Coordinates, 12)
 
 	for i := range set {
-		set[i] = GetHeptagramPattern(hw, hh, 100, 1, i * (defaultSteps/len(set)))
+		set[i] = GetHeptagramPattern(hw, hh, radius, 1, i * (defaultSteps/len(set)))
 	}
 
 	var steps = make([][]Shape, defaultSteps)
 	for i := range steps {
-		steps[i] = make([]Shape, 3 * len(set))
+		steps[i] = make([]Shape, 3 * len(set) + 7)
 		for j := range steps[i] {
 			if j < len(set) {
-				steps[i][j] = &Circle{X: set[j][i].X, Y: set[j][i].Y, R: 3,}
+				steps[i][j] = &Circle{X: set[j][i].X, Y: set[j][i].Y, R: 3}
 			} else if j < 2 * len(set) {
 				steps[i][j] = &Line{Start: set[j%len(set)][i], End: set[(j+3)%len(set)][i], Color:palette[1]}
-			} else {
+			} else if j < 3 * len(set) {
 				steps[i][j] = &Line{Start: set[j%len(set)][i], End: set[(j+4)%len(set)][i], Color:palette[2]}
+			} else {
+				c := GetHeptagramPoints(hw, hh, radius, float64(i)/rotationReduction, j % heptaPoints)
+				steps[i][j] = &Circle{X: c.X,Y: c.Y, R: 3}
 			}
 		}
 	}
@@ -244,7 +247,7 @@ func main() {
 	var hw, hh = float64(w/2), float64(h/2)
 
 	//patterns := []ShapePattern{RotatingSquares(hw, hh), RotatingCircle(hw, hh)}
-	patterns := []ShapePattern{RotatingHeptagram(hw, hh)}
+	patterns := []ShapePattern{RotatingHeptagram(hw, hh, 100)}
 
 	var images []*image.Paletted
 	var delays []int
