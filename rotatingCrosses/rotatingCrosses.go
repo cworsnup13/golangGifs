@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultSteps = 1
+	defaultSteps = 50
 )
 
 var (
@@ -41,31 +41,87 @@ type Coordinates struct {
 	X, Y float64
 }
 
+type EqualCross struct {
+	Center                      Coordinates
+	Radius, Rotation, Thickness float64
+	Color                       color.Color
+}
+
 type Cross struct {
-	Center Coordinates
+	Center                   Coordinates
 	Width, Height, Thickness float64
-	Color color.Color
+	Color                    color.Color
 }
 
 type CrossPattern struct {
 	steps []Cross
 }
 
+type EqualCrossPattern struct {
+	steps []EqualCross
+}
+
 type PatternComposite struct {
 	Patterns []ShapePattern
+}
+
+func BetweenLines(c1, c2, c3, c4 Coordinates, xCheck, yCheck float64) bool {
+	line1Slope := (c2.Y - c1.Y) / (c2.X - c1.X)
+	line1Intercept := c1.Y - (line1Slope * c1.X)
+
+	line2Slope := (c4.Y - c3.Y) / (c4.X - c3.X)
+	line2Intercept := c3.Y - (line2Slope * c3.X)
+
+	if math.IsInf(line1Slope, 1) || math.IsInf(line2Slope, 1) {
+		if xCheck > math.Min(c1.X, math.Min(c2.X, math.Min(c3.X, c3.X))) && xCheck < math.Max(c1.X, math.Max(c2.X, math.Max(c3.X, c3.X))) {
+			return true
+		}
+		return false
+	}
+
+	parallel := yCheck - line1Slope*xCheck
+	if parallel > math.Min(line1Intercept, line2Intercept) && parallel < math.Max(line1Intercept, line2Intercept) {
+		return true
+	}
+	return false
+}
+
+func (c *EqualCross) Brightness(x, y float64) (bool, color.Color) {
+	var points = make([]Coordinates, 8)
+
+	for i := range points {
+		even := i%2 == 0
+		thickness := c.Thickness
+		if even {
+			thickness *= -1
+		}
+		points[i] = Coordinates{
+			X: c.Center.X - c.Radius*math.Sin(float64(i/2)*(math.Pi/2)+thickness+c.Rotation),
+			Y: c.Center.Y - c.Radius*math.Cos(float64(i/2)*(math.Pi/2)+thickness+c.Rotation),
+		}
+	}
+
+	bw1 := BetweenLines(points[2], points[7], points[3], points[6], x, y)
+	bw2 := BetweenLines(points[0], points[5], points[1], points[4], x, y)
+	bw3 := BetweenLines(points[0], points[1], points[4], points[5], x, y)
+	bw4 := BetweenLines(points[2], points[3], points[6], points[7], x, y)
+	if bw1 && bw4 || bw2 && bw3 {
+		return true, c.Color
+	}
+	return false, defaultColor
 }
 
 func (c *Cross) Brightness(x, y float64) (bool, color.Color) {
 	var drawn bool
 	var retCol color.Color
 
-	if x > c.Center.X - c.Width && x < c.Center.X + c.Width {
-		if y > c.Center.Y - c.Thickness && y < c.Center.Y + c.Thickness{
+	if x > c.Center.X-c.Width && x < c.Center.X+c.Width {
+		if y > c.Center.Y-c.Thickness && y < c.Center.Y+c.Thickness {
 			drawn = true
 		}
 	}
-	if !drawn && y > c.Center.Y - c.Height && y < c.Center.Y + c.Height {
-		if x > c.Center.X - c.Thickness && x < c.Center.X + c.Thickness{
+	if !drawn && y > c.Center.Y-c.Height && y < c.Center.Y+c.Height {
+		if x > c.Center.X-c.Thickness && x < c.Center.X+c.Thickness {
 			drawn = true
 		}
 	}
@@ -82,10 +138,15 @@ func (c *CrossPattern) Draw(step int, x, y float64) (bool, color.Color) {
 	return c.steps[step].Brightness(x, y)
 }
 
+func (c *EqualCrossPattern) Draw(step int, x, y float64) (bool, color.Color) {
+	return c.steps[step].Brightness(x, y)
+}
+
 func (p *PatternComposite) Draw(step int, x, y float64) (bool, color.Color) {
 	var drawn bool
 	var col color.Color
-	for _, v := range p.Patterns{
+	col = defaultColor
+	for _, v := range p.Patterns {
 		d, tmpCol := v.Draw(step, x, y)
 		if d {
 			col = tmpCol
@@ -98,18 +159,42 @@ func SingleCross(xCenter, yCenter, width, height, thickness float64, col color.C
 	var steps = make([]Cross, defaultSteps)
 	for i := range steps {
 		steps[i] = Cross{
-			Center: Coordinates{X: xCenter, Y: yCenter},
-			Width: width,
-			Height:height,
+			Center:    Coordinates{X: xCenter, Y: yCenter},
+			Width:     width,
+			Height:    height,
 			Thickness: thickness,
-			Color: col,
+			Color:     col,
 		}
 	}
-	return CrossPattern{steps:steps}
+	return CrossPattern{steps: steps}
 }
 
+func SingleEqualCross(xCenter, yCenter, radius, thickness float64, col color.Color) EqualCrossPattern {
+	fmt.Println(xCenter, yCenter)
+	var steps = make([]EqualCross, defaultSteps)
+	for i := range steps {
+		steps[i] = EqualCross{
+			Center:    Coordinates{X: xCenter, Y: yCenter},
+			Radius:    radius,
+			Thickness: thickness,
+			Color:     col,
+			Rotation:  (math.Pi * 2) * (float64(i) / float64(defaultSteps)),
+		}
+	}
+	return EqualCrossPattern{steps: steps}
+}
 
-func DrawPalette(w, h, step int, patterns ShapePattern ) *image.Paletted {
+func RowEqualCross(xCenter, yCenter, radius, thickness float64, col color.Color) PatternComposite {
+	var children = make([]ShapePattern, 3)
+	xStart := xCenter - 2*radius
+	for i := range children {
+		x := SingleEqualCross(xStart+float64(2*i)*radius, yCenter, radius, thickness, col)
+		children[i] = &x
+	}
+	return PatternComposite{Patterns: children}
+}
+
+func DrawPalette(w, h, step int, patterns ShapePattern) *image.Paletted {
 	img := image.NewPaletted(image.Rect(0, 0, w, h), palette)
 	for x := 0; x < w; x++ {
 		for y := 0; y < h; y++ {
@@ -124,13 +209,15 @@ func main() {
 	startTime := time.Now()
 	var w, h = 240, 240
 	var hw, hh = float64(w/2), float64(h/2)
-
-	pattern := SingleCross(hw, hh, 15,15,5, palette[0])
+	//pattern := SingleCross(hw, hh, 15,15,5, palette[0])
+	//pattern := SingleEqualCross(hw, hh, 25, math.Pi/10, palette[0])
+	pattern := RowEqualCross(hw, hh, 25, math.Pi/10, palette[0])
 
 	var images []*image.Paletted
 	var delays []int
 	steps := defaultSteps
 	for step := 0; step < steps; step++ {
+		fmt.Println(step)
 		img := DrawPalette(w, h, step, &pattern)
 		images = append(images, img)
 		delays = append(delays, 0)
@@ -142,5 +229,5 @@ func main() {
 		Image: images,
 		Delay: delays,
 	})
-	fmt.Printf("Built gif in %d seconds\n", time.Now().Unix() - startTime.Unix())
+	fmt.Printf("Built gif in %d seconds\n", time.Now().Unix()-startTime.Unix())
 }
