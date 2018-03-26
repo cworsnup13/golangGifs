@@ -200,7 +200,7 @@ func SingleEqualCross(xCenter, yCenter, radius, thickness float64, col color.Col
 }
 
 func RowEqualCross(xCenter, yCenter, radius, thickness float64, col color.Color) PatternComposite {
-	var children = make([]ShapePattern, 5)
+	var children = make([]ShapePattern, 6)
 
 	var xThickness = radius*math.Cos(0) - radius*math.Cos(thickness)
 	var yThickness = radius*math.Sin(0) - radius*math.Sin(thickness)
@@ -231,20 +231,30 @@ func DrawPalette(w, h, step int, patterns ShapePattern) *image.Paletted {
 
 func main() {
 	startTime := time.Now()
-	var w, h = 240, 240
+	var w, h = 235, 235
 	//var hw, hh = float64(w/2), float64(h/2)
-	//pattern := SingleCross(hw, hh, 15,15,5, palette[0])
-	//pattern := SingleEqualCross(hw, hh, 25, math.Pi/10, palette[0])
 	var thickness = math.Pi/10
 	var radius = 25.0
-	//var yThickness = radius*math.Sin(0) - radius*math.Sin(thickness)
-	//pattern := RowEqualCross(0, 240, radius, thickness, palette[0])
+	var cosThickness = math.Abs(radius*math.Cos(0) - radius*math.Cos(thickness))
+	var sinThickness = math.Abs(radius*math.Sin(0) - radius*math.Sin(thickness))
+	fmt.Println(cosThickness, sinThickness)
 	var patterns PatternComposite
+	xNext := 0.0 - radius - sinThickness
+	yNext := 2 * sinThickness - 1
 
-	pattern := RowEqualCross(0, 240-(2*radius*3), radius, thickness, palette[0])
-	patterns.AddChild(&pattern)
-	pattern2 := RowEqualCross(0, 240, radius, thickness, palette[0])
-	patterns.AddChild(&pattern2)
+	for i:= 1; i < 7; i++ {
+		pattern := RowEqualCross(xNext, yNext, radius, thickness, palette[0])
+		patterns.AddChild(&pattern)
+		xNext += 2 * sinThickness
+		yNext += 2 * radius - 2 * cosThickness
+	}
+
+	//pattern2 := RowEqualCross(0, 240, radius, thickness, palette[0])
+	//patterns.AddChild(&pattern2)
+	//pattern3 := RowEqualCross(0+(2*yThickness), 240-(2*radius)+2*xThickness, radius, thickness, palette[0])
+	//patterns.AddChild(&pattern3)
+	//pattern4 := RowEqualCross(0-(2*yThickness), 240-(4*radius)+4*xThickness, radius, thickness, palette[0])
+	//patterns.AddChild(&pattern4)
 
 	var images []*image.Paletted
 	var delays []int
