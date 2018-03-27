@@ -79,7 +79,7 @@ func BetweenLines(c1, c2, c3, c4 Coordinates, xCheck, yCheck float64) bool {
 	infCheck := math.IsInf(line1Slope, 1) || math.IsInf(line1Slope, -1) || math.IsInf(line2Slope, 1) || math.IsInf(line2Slope, -1)
 	approxInfCheck := line1Slope > 1e6 || line1Slope < -1e6 || line2Slope > 1e6 || line2Slope < -1e6
 	if infCheck || approxInfCheck {
-		xmin := math.Min(c1.X,math.Min(c2.X, math.Min(c3.X, c3.X)))
+		xmin := math.Min(c1.X, math.Min(c2.X, math.Min(c3.X, c3.X)))
 		xmax := math.Max(c1.X, math.Max(c2.X, math.Max(c3.X, c3.X)))
 		if xCheck > xmin && xCheck < xmax {
 			return true
@@ -105,17 +105,11 @@ func (c *EqualCross) Brightness(x, y float64) (bool, color.Color) {
 		if even {
 			thickness *= -1
 		}
-		//if i == 0 {
-		//	p1 := c.Center.X - c.Radius*math.Cos(float64(i/2)*(math.Pi/2)+thickness+c.Rotation)
-		//	p2 := c.Center.X - c.Radius*math.Cos(float64(i/2)*(math.Pi/2)+c.Rotation)
-		//	fmt.Println(p2-p1)
-		//}
 		points[i] = Coordinates{
 			X: c.Center.X - c.Radius*math.Sin(float64(i/2)*(math.Pi/2)+thickness+c.Rotation),
 			Y: c.Center.Y - c.Radius*math.Cos(float64(i/2)*(math.Pi/2)+thickness+c.Rotation),
 		}
 	}
-
 	bw1 := BetweenLines(points[2], points[7], points[3], points[6], x, y)
 	bw2 := BetweenLines(points[0], points[5], points[1], points[4], x, y)
 	bw3 := BetweenLines(points[0], points[1], points[4], points[5], x, y)
@@ -185,7 +179,7 @@ func SingleCross(xCenter, yCenter, width, height, thickness float64, col color.C
 	return CrossPattern{steps: steps}
 }
 
-func SingleEqualCross(xCenter, yCenter, radius, thickness float64, col color.Color) EqualCrossPattern {
+func SingleEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, col color.Color) EqualCrossPattern {
 	var steps = make([]EqualCross, defaultSteps)
 	for i := range steps {
 		steps[i] = EqualCross{
@@ -193,29 +187,49 @@ func SingleEqualCross(xCenter, yCenter, radius, thickness float64, col color.Col
 			Radius:    radius,
 			Thickness: thickness,
 			Color:     col,
-			Rotation:  (math.Pi * 2) * (float64(i) / float64(defaultSteps)),
+			Rotation:  (math.Pi * 2) * (float64(i) * rotDir / float64(defaultSteps)),
 		}
 	}
 	return EqualCrossPattern{steps: steps}
 }
 
-func RowEqualCross(xCenter, yCenter, radius, thickness float64, col color.Color) PatternComposite {
+func RowEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, col color.Color) PatternComposite {
 	var children = make([]ShapePattern, 6)
 
-	var xThickness = radius*math.Cos(0) - radius*math.Cos(thickness)
-	var yThickness = radius*math.Sin(0) - radius*math.Sin(thickness)
+	var xThickness = radius * (math.Cos(0) - math.Cos(thickness))
+	var yThickness = radius * (math.Sin(0) - math.Sin(thickness))
 	xStart := xCenter + radius - xThickness
 	yStart := yCenter + yThickness
-	var xSpacer = 2 * radius - 2 * xThickness
+	var xSpacer = 2*radius - 2*xThickness
 	var ySpacer = 2 * yThickness
-	//var ySpacer = 2 * radius - 2 * circleSpacer
 	for i := range children {
 		x := xStart + float64(i)*xSpacer
 		y := yStart + float64(i)*ySpacer
-		cross := SingleEqualCross(x, y, radius, thickness, col)
+		cross := SingleEqualCross(x, y, radius, thickness, rotDir, col)
 		children[i] = &cross
 	}
 	return PatternComposite{Patterns: children}
+}
+
+func GridEqualCross(xStart, yStart, radius, thickness, rotDir float64, col color.Color) PatternComposite {
+	var cosThickness = math.Abs(radius*math.Cos(0) - radius*math.Cos(thickness))
+	var sinThickness = math.Abs(radius*math.Sin(0) - radius*math.Sin(thickness))
+	var patterns PatternComposite
+	xNext := xStart - radius - sinThickness
+	yNext := yStart + 2*sinThickness - 1
+	for i := 1; i < 8; i++ {
+		if i != 0 && i%4 == 0 {
+			xNext -= 2*radius - 2*cosThickness
+			yNext += 2 * sinThickness
+		}
+		pattern := RowEqualCross(xNext, yNext, radius, thickness, rotDir, col)
+		pattern.Draw(0, 0, 0)
+
+		patterns.AddChild(&pattern)
+		xNext += 2 * sinThickness
+		yNext += 2*radius - 2*cosThickness
+	}
+	return patterns
 }
 
 func DrawPalette(w, h, step int, patterns ShapePattern) *image.Paletted {
@@ -233,35 +247,25 @@ func main() {
 	startTime := time.Now()
 	var w, h = 235, 235
 	//var hw, hh = float64(w/2), float64(h/2)
-	var thickness = math.Pi/10
+	var thickness = math.Pi / 10
 	var radius = 25.0
-	var cosThickness = math.Abs(radius*math.Cos(0) - radius*math.Cos(thickness))
+
+	//var cosThickness = math.Abs(radius*math.Cos(0) - radius*math.Cos(thickness))
 	var sinThickness = math.Abs(radius*math.Sin(0) - radius*math.Sin(thickness))
-	fmt.Println(cosThickness, sinThickness)
-	var patterns PatternComposite
-	xNext := 0.0 - radius - sinThickness
-	yNext := 2 * sinThickness - 1
 
-	for i:= 1; i < 7; i++ {
-		pattern := RowEqualCross(xNext, yNext, radius, thickness, palette[0])
-		patterns.AddChild(&pattern)
-		xNext += 2 * sinThickness
-		yNext += 2 * radius - 2 * cosThickness
-	}
+	var mainPattern PatternComposite
 
-	//pattern2 := RowEqualCross(0, 240, radius, thickness, palette[0])
-	//patterns.AddChild(&pattern2)
-	//pattern3 := RowEqualCross(0+(2*yThickness), 240-(2*radius)+2*xThickness, radius, thickness, palette[0])
-	//patterns.AddChild(&pattern3)
-	//pattern4 := RowEqualCross(0-(2*yThickness), 240-(4*radius)+4*xThickness, radius, thickness, palette[0])
-	//patterns.AddChild(&pattern4)
+	pattern1 := GridEqualCross(0, 0, radius, thickness, 1, palette[0])
+	mainPattern.AddChild(&pattern1)
+	pattern2 := GridEqualCross(-2*sinThickness, 4*sinThickness, radius, thickness, -1, palette[5])
+	mainPattern.AddChild(&pattern2)
 
 	var images []*image.Paletted
 	var delays []int
 	steps := defaultSteps
 	for step := 0; step < steps; step++ {
 		fmt.Println(step)
-		img := DrawPalette(w, h, step, &patterns)
+		img := DrawPalette(w, h, step, &mainPattern)
 		images = append(images, img)
 		delays = append(delays, 0)
 	}
