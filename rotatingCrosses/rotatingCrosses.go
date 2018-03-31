@@ -44,6 +44,7 @@ type Coordinates struct {
 type EqualCross struct {
 	Center                      Coordinates
 	Radius, Rotation, Thickness float64
+	xMin, xMax, yMin, yMax      float64
 	Color                       color.Color
 }
 
@@ -97,6 +98,10 @@ func BetweenLines(c1, c2, c3, c4 Coordinates, xCheck, yCheck float64) bool {
 }
 
 func (c *EqualCross) Brightness(x, y float64) (bool, color.Color) {
+	if x < c.xMin || x > c.xMax || y < c.yMin || y > c.yMax {
+		return false, defaultColor
+	}
+
 	var points = make([]Coordinates, 8)
 
 	for i := range points {
@@ -120,33 +125,6 @@ func (c *EqualCross) Brightness(x, y float64) (bool, color.Color) {
 	return false, defaultColor
 }
 
-func (c *Cross) Brightness(x, y float64) (bool, color.Color) {
-	var drawn bool
-	var retCol color.Color
-
-	if x > c.Center.X-c.Width && x < c.Center.X+c.Width {
-		if y > c.Center.Y-c.Thickness && y < c.Center.Y+c.Thickness {
-			drawn = true
-		}
-	}
-	if !drawn && y > c.Center.Y-c.Height && y < c.Center.Y+c.Height {
-		if x > c.Center.X-c.Thickness && x < c.Center.X+c.Thickness {
-			drawn = true
-		}
-	}
-
-	if drawn {
-		retCol = c.Color
-	} else {
-		retCol = defaultColor
-	}
-	return drawn, retCol
-}
-
-func (c *CrossPattern) Draw(step int, x, y float64) (bool, color.Color) {
-	return c.steps[step].Brightness(x, y)
-}
-
 func (c *EqualCrossPattern) Draw(step int, x, y float64) (bool, color.Color) {
 	return c.steps[step].Brightness(x, y)
 }
@@ -165,20 +143,6 @@ func (p *PatternComposite) Draw(step int, x, y float64) (bool, color.Color) {
 	return drawn, col
 }
 
-func SingleCross(xCenter, yCenter, width, height, thickness float64, col color.Color) CrossPattern {
-	var steps = make([]Cross, defaultSteps)
-	for i := range steps {
-		steps[i] = Cross{
-			Center:    Coordinates{X: xCenter, Y: yCenter},
-			Width:     width,
-			Height:    height,
-			Thickness: thickness,
-			Color:     col,
-		}
-	}
-	return CrossPattern{steps: steps}
-}
-
 func SingleEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, col color.Color) EqualCrossPattern {
 	var steps = make([]EqualCross, defaultSteps)
 	for i := range steps {
@@ -188,6 +152,10 @@ func SingleEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, col c
 			Thickness: thickness,
 			Color:     col,
 			Rotation:  (math.Pi * 2) * (float64(i) * rotDir / float64(defaultSteps)),
+			xMin:      xCenter - radius,
+			xMax:      xCenter + radius,
+			yMin:      yCenter - radius,
+			yMax:      yCenter + radius,
 		}
 	}
 	return EqualCrossPattern{steps: steps}
