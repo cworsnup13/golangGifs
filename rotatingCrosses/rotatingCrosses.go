@@ -1,17 +1,19 @@
 package main
 
 import (
-	"image/color"
-	"image"
-	"os"
-	"image/gif"
 	"fmt"
-	"time"
+	"image"
+	"image/color"
+	"image/gif"
 	"math"
+	"os"
+	"time"
 )
 
 const (
-	defaultSteps = 20
+	defaultSteps     = 12
+	steps90Turn      = 5
+	stepsBetweenTurn = 15
 )
 
 var (
@@ -143,15 +145,20 @@ func (p *PatternComposite) Draw(step int, x, y float64) (bool, color.Color) {
 	return drawn, col
 }
 
-func SingleEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, col color.Color) EqualCrossPattern {
+func SingleEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, startTurnStep int, col color.Color) EqualCrossPattern {
 	var steps = make([]EqualCross, defaultSteps)
+	var rotState = 0.0
 	for i := range steps {
+		if i%stepsBetweenTurn >= startTurnStep && i%stepsBetweenTurn < startTurnStep+steps90Turn {
+			rotState += rotDir * (math.Pi / 2) / float64(steps90Turn)
+		}
+
 		steps[i] = EqualCross{
 			Center:    Coordinates{X: xCenter, Y: yCenter},
 			Radius:    radius,
 			Thickness: thickness,
 			Color:     col,
-			Rotation:  (math.Pi * 2) * (float64(i) * rotDir / float64(defaultSteps)),
+			Rotation:  rotState,
 			xMin:      xCenter - radius,
 			xMax:      xCenter + radius,
 			yMin:      yCenter - radius,
@@ -161,7 +168,7 @@ func SingleEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, col c
 	return EqualCrossPattern{steps: steps}
 }
 
-func RowEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, col color.Color) PatternComposite {
+func RowEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, startTurnStep int, col color.Color) PatternComposite {
 	var children = make([]ShapePattern, 6)
 
 	var xThickness = radius * (math.Cos(0) - math.Cos(thickness))
@@ -173,7 +180,7 @@ func RowEqualCross(xCenter, yCenter, radius, thickness, rotDir float64, col colo
 	for i := range children {
 		x := xStart + float64(i)*xSpacer
 		y := yStart + float64(i)*ySpacer
-		cross := SingleEqualCross(x, y, radius, thickness, rotDir, col)
+		cross := SingleEqualCross(x, y, radius, thickness, rotDir, startTurnStep, col)
 		children[i] = &cross
 	}
 	return PatternComposite{Patterns: children}
@@ -190,7 +197,7 @@ func GridEqualCross(xStart, yStart, radius, thickness, rotDir float64, col color
 			xNext -= 2*radius - 2*cosThickness
 			yNext += 2 * sinThickness
 		}
-		pattern := RowEqualCross(xNext, yNext, radius, thickness, rotDir, col)
+		pattern := RowEqualCross(xNext, yNext, radius, thickness, rotDir, i, col)
 		pattern.Draw(0, 0, 0)
 
 		patterns.AddChild(&pattern)
